@@ -1,11 +1,15 @@
 # openclaw-quota-presence
 
 An [OpenClaw](https://github.com/openclaw/openclaw) plugin that shows how much
-quota is left on each AI provider as your bot's **Discord custom status**:
+quota is left on each AI provider as your bot's **Discord custom status** — and,
+if you want, as a small line under each reply:
 
-```
-Argon 55% | GPT 84% | Opus 92%
-```
+<img src="docs/custom-status.png" alt="Discord member list: the bot's custom status reads “Argon 0% | GPT 98% | Opus 100%”" width="255">
+
+<img src="docs/reply-footer.png" alt="A bot reply in Discord ending with a small grey line “Argon 0% | GPT 98% | Opus 100%”; the message text is blurred" width="778">
+
+*The custom status in the member list, and the optional [reply footer](#reply-footer)
+(message text blurred).*
 
 No model calls anywhere. Two parts:
 
