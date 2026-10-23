@@ -9,7 +9,9 @@ export const DEFAULT_RESET_TIME_ZONE = "Asia/Tokyo";
  * [{ label, source, window, windows }], where source is a group
  * ("agy:gemini-4-argon", "usage:openai"), window is "min" (the tightest limit;
  * default) or a window id ("5h", "week"), and windows a list of window ids
- * shown together through {windows}.
+ * shown together through {windows}. "min" leaves out model-scoped windows
+ * (scope "model", e.g. claude-code's "fable") when the group has others: a
+ * limit on one model is not the limit of the whole group.
  * @returns {{label: string, row?: object, rows: object[]}[]}  row: the tightest of rows
  */
 export function resolveItems(items, rows) {
@@ -35,6 +37,7 @@ export function describeItems(items, rows) {
           window: row.window,
           remaining: Math.round(row.remaining),
           ...(row.resetAt ? { resetAt: new Date(row.resetAt).toISOString() } : {}),
+          ...(row.fetchedAt ? { fetchedAt: new Date(row.fetchedAt).toISOString() } : {}),
           ...(found.length > 1
             ? { windows: found.map((r) => ({ window: r.window, remaining: Math.round(r.remaining), ...(r.resetAt ? { resetAt: new Date(r.resetAt).toISOString() } : {}) })) }
             : {}),
@@ -52,7 +55,8 @@ function autoItems(rows) {
 function pick(rows, source, window = "min") {
   const mine = rows.filter((r) => r.group === source);
   if (window !== "min") return mine.find((r) => r.window === window);
-  return tightest(mine);
+  const whole = mine.filter((r) => r.scope !== "model");
+  return tightest(whole.length ? whole : mine);
 }
 
 function tightest(rows) {
@@ -65,7 +69,7 @@ function tightest(rows) {
  * @param {object[]} rows
  * @param {object} opts  items, template, itemTemplate, missingTemplate (false hides), separator,
  *   windowTemplate, windowSeparator, windowLabels, resetAtFormat, resetAtTodayFormat, resetPrecision,
- *   maxLength, timeZone
+ *   staleMark, markStaleAfterMs, maxLength, timeZone
  */
 export function renderStatus(rows, opts = {}, now = Date.now()) {
   const {
@@ -98,7 +102,15 @@ function itemVars(label, row, now, opts) {
     window: opts.windowLabels?.[row.window] ?? row.window,
     reset: row.resetAt ? untilText(row.resetAt - now, opts.resetPrecision) : "",
     resetAt: row.resetAt ? resetAtText(row.resetAt, now, opts) : "",
+    stale: isStale(row, now, opts) ? (opts.staleMark ?? DEFAULT_STALE_MARK) : "",
   };
+}
+
+export const DEFAULT_STALE_MARK = "*";
+
+/** Fetched longer than markStaleAfterMs ago (a source that keeps failing shows its last numbers). */
+export function isStale(row, now, { markStaleAfterMs } = {}) {
+  return markStaleAfterMs > 0 && Number.isFinite(row.fetchedAt) && now - row.fetchedAt > markStaleAfterMs;
 }
 
 /** Replace {name} with vars[name]; unknown names stay as they are. */

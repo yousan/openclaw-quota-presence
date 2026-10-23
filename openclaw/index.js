@@ -1,13 +1,15 @@
 // quota-presence for OpenClaw: a Gateway service that turns how much quota is
-// left on each AI provider into one line ("Argon 55% | GPT 84% | Opus 92%")
+// left on each AI provider into one line ("Argon 55% | GPT 84% | Claude 65%")
 // and writes it to <state>/quota-presence/status.json. No model calls: the
-// numbers come from `agy -p /usage` and from OpenClaw's own provider usage
-// loader, called inside the Gateway process (never through the `openclaw` CLI).
+// numbers come from `agy -p /usage`, from OpenClaw's own provider usage
+// loader, called inside the Gateway process (never through the `openclaw` CLI),
+// and, if enabled, from the plan usage of Claude Code's own login.
 // Putting the line on Discord is automation/set-presence.js's job.
 
 import os from "node:os";
 import path from "node:path";
 import { createAgyFetcher } from "../src/agy.js";
+import { createClaudeFetcher } from "../src/claude.js";
 import { applyFooter, footerPattern } from "../src/footer.js";
 import { loadUsageFunction } from "../src/host.js";
 import { normalizeUsageSummary, usageSummaryErrors } from "../src/quota.js";
@@ -21,7 +23,7 @@ export default {
   id: PLUGIN_ID,
   name: "Quota Presence",
   description:
-    "Writes how much quota is left on each AI provider as one status line (status.json) for the bot's Discord custom status. Reads agy /usage and OpenClaw's provider usage; no model calls.",
+    "Writes how much quota is left on each AI provider as one status line (status.json) for the bot's Discord custom status. Reads agy /usage, OpenClaw's provider usage and, if enabled, Claude Code's own plan usage; no model calls.",
   register(api) {
     if (api.registrationMode && api.registrationMode !== "full") return;
     const pc = api.pluginConfig || {};
@@ -95,6 +97,7 @@ export const FOOTER_DISPLAY_KEYS = [
   "resetAtFormat",
   "resetAtTodayFormat",
   "resetPrecision",
+  "staleMark",
   "timeZone",
 ];
 
@@ -105,6 +108,10 @@ function footerDisplay(footer) {
 export function createSources(api, ctx, config) {
   const sources = [];
   if (config.agy.enabled) sources.push({ id: "agy", fetch: createAgyFetcher(config.agy) });
+  if (config.claudeCode.enabled) {
+    const { credentialsFile, timeoutMs } = config.claudeCode;
+    sources.push({ id: "claude-code", fetch: createClaudeFetcher({ timeoutMs, ...(credentialsFile ? { credentialsFile } : {}) }) });
+  }
   if (config.usage.enabled) {
     let load = null;
     sources.push({

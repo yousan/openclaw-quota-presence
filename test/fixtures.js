@@ -38,3 +38,29 @@ export const EXAMPLE_ITEMS = [
   { label: "GPT", source: "usage:openai" },
   { label: "Opus", source: "usage:anthropic", window: "opus" },
 ];
+
+// GET /api/oauth/usage for a Claude Code login (Max plan), 2026-10-23 14:07Z,
+// trimmed to the keys this plugin reads plus a few it must ignore. On that
+// plan there is no Opus-only limit: seven_day_opus is null.
+export const CLAUDE_USAGE = {
+  five_hour: { utilization: 35, resets_at: "2026-10-23T16:40:00.316701+00:00" },
+  seven_day: { utilization: 8, resets_at: "2026-10-30T08:00:00.316727+00:00" },
+  seven_day_oauth_apps: null,
+  seven_day_opus: null,
+  seven_day_sonnet: null,
+  extra_usage: { is_enabled: false, monthly_limit: 0, used_credits: 0, utilization: null, currency: "USD" },
+  limits: [
+    { kind: "session", group: "session", percent: 35, resets_at: "2026-10-23T16:40:00.316701+00:00", scope: null, is_active: true },
+    { kind: "weekly_all", group: "weekly", percent: 8, resets_at: "2026-10-30T08:00:00.316727+00:00", scope: null, is_active: false },
+    {
+      kind: "weekly_scoped",
+      group: "weekly",
+      percent: 0,
+      resets_at: "2026-10-30T08:00:00+00:00",
+      scope: { model: { id: null, display_name: "Fable" }, surface: null },
+      is_active: false,
+    },
+  ],
+};
+// When it was fetched.
+export const CLAUDE_USAGE_AT = Date.parse("2026-10-23T14:07:27Z");

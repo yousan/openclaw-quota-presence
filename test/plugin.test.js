@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import plugin, { footerHook } from "../openclaw/index.js";
+import plugin, { createSources, footerHook } from "../openclaw/index.js";
 import { resolvePluginConfig } from "../openclaw/config.js";
 import { USAGE_SUMMARY } from "./fixtures.js";
 
@@ -123,6 +123,19 @@ test("config defaults", () => {
   assert.deepEqual(c.agy.args, ["-p", "/usage"]);
   assert.equal(resolvePluginConfig({ intervalMs: 1000, maxLength: 999 }, { stateDir: "/s" }).intervalMs, 60_000);
   assert.equal(resolvePluginConfig({ maxLength: 999 }, { stateDir: "/s" }).maxLength, 128);
+  assert.equal(c.claudeCode.enabled, false, "reading Claude Code's login is opt-in");
+  assert.equal(c.markStaleAfterMs, 35 * 60_000);
+  assert.equal(resolvePluginConfig({ intervalMs: 600_000 }, { stateDir: "/s" }).markStaleAfterMs, 25 * 60_000);
+  assert.equal(resolvePluginConfig({ markStaleAfterMs: 0 }, { stateDir: "/s" }).markStaleAfterMs, 0);
+  assert.equal(c.staleMark, "*");
+});
+
+test("sources: claude-code only when enabled", () => {
+  const ids = (pc) => createSources({}, {}, resolvePluginConfig(pc, { stateDir: "/s" })).map((s) => s.id);
+  assert.deepEqual(ids({}), ["agy", "usage"]);
+  assert.deepEqual(ids({ claudeCode: { enabled: true }, agy: { enabled: false }, usage: { enabled: false } }), ["claude-code"]);
+  const c = resolvePluginConfig({ claudeCode: { enabled: true, credentialsFile: "~/x/.credentials.json" } }, { stateDir: "/s" });
+  assert.equal(c.claudeCode.credentialsFile, path.join(os.homedir(), "x/.credentials.json"));
 });
 
 test("the manifest's configSchema covers every config key", async () => {
@@ -135,6 +148,8 @@ test("the manifest's configSchema covers every config key", async () => {
   for (const k of Object.keys(DEFAULTS.agy)) assert.ok(k in props.agy.properties, `agy.${k}`);
   for (const k of Object.keys(DEFAULTS.usage)) assert.ok(k in props.usage.properties, `usage.${k}`);
   for (const k of Object.keys(DEFAULTS.footer)) assert.ok(k in props.footer.properties, `footer.${k}`);
+  for (const k of [...Object.keys(DEFAULTS.claudeCode), "credentialsFile"]) assert.ok(k in props.claudeCode.properties, `claudeCode.${k}`);
+  assert.ok("markStaleAfterMs" in props);
   const pkg = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url)));
   assert.equal(manifest.version, pkg.version);
   assert.equal(manifest.id, plugin.id);

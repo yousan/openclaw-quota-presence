@@ -1,8 +1,8 @@
 {
   "id": "quota-presence",
   "name": "Quota Presence",
-  "description": "Writes how much quota is left on each AI provider as one status line (status.json) for the bot's Discord custom status. Reads agy /usage and OpenClaw's provider usage; no model calls.",
-  "version": "0.4.0",
+  "description": "Writes how much quota is left on each AI provider as one status line (status.json) for the bot's Discord custom status. Reads agy /usage, OpenClaw's provider usage and, if enabled, Claude Code's own plan usage; no model calls.",
+  "version": "0.5.0",
   "categories": [
     "data-analytics",
     "infrastructure"
@@ -13,7 +13,7 @@
   "uiHints": {
     "items": {
       "label": "What to show",
-      "help": "\"auto\" (every source found) or a list of { label, source, window, windows }. source is a group such as agy:gemini-4-argon or usage:openai; window is min (the tightest limit, default), 5h or week; windows: [\"5h\",\"week\"] shows several through {windows}."
+      "help": "\"auto\" (every source found) or a list of { label, source, window, windows }. source is a group such as agy:gemini-4-argon, usage:openai or claude-code; window is min (the tightest limit, default), 5h or week; windows: [\"5h\",\"week\"] shows several through {windows}."
     },
     "template": {
       "label": "Status template",
@@ -21,7 +21,7 @@
     },
     "itemTemplate": {
       "label": "Item template",
-      "help": "Default \"{label} {remaining}%\". Also {used}, {window}, {reset} (time until reset: 45m / 3h / 2d), {resetAt} (when: 10/28 16:04), {windows} (every window of the item).",
+      "help": "Default \"{label} {remaining}%\". Also {used}, {window}, {reset} (time until reset: 45m / 3h / 2d), {resetAt} (when: 10/28 16:04), {windows} (every window of the item), {stale} (staleMark when the numbers are old).",
       "advanced": true
     },
     "missingTemplate": {
@@ -85,6 +85,16 @@
       "help": "When a source fails, its last numbers stay up this long. Default 10800000 (3 hours); 0 keeps them forever.",
       "advanced": true
     },
+    "markStaleAfterMs": {
+      "label": "Mark numbers as old after (ms)",
+      "help": "{stale} shows staleMark (default \"*\") for numbers fetched longer ago than this. Default 2 × intervalMs + 5 minutes (35 minutes); 0 never marks.",
+      "advanced": true
+    },
+    "staleMark": {
+      "label": "Old-numbers mark",
+      "help": "What {stale} shows for old numbers. Default \"*\".",
+      "advanced": true
+    },
     "agy": {
       "label": "Antigravity CLI",
       "help": "{ enabled, command, args, timeoutMs (30000), lockFile }. Runs `agy -p /usage` (no model call). On by default.",
@@ -93,6 +103,11 @@
     "usage": {
       "label": "OpenClaw provider usage",
       "help": "{ enabled, providers, timeoutMs, agentDir, module }. Reads the same numbers as /status, inside the Gateway. On by default.",
+      "advanced": true
+    },
+    "claudeCode": {
+      "label": "Claude Code login",
+      "help": "{ enabled, credentialsFile, timeoutMs (10000) }. Off by default. Reads the plan usage (5h, week, model-scoped weeks) of the account Claude Code is logged in with — the one the claude-cli runtime uses — from GET api.anthropic.com/api/oauth/usage, the request Claude Code's /usage makes. The token is read from Claude Code's credentials file ($CLAUDE_CONFIG_DIR or ~/.claude/.credentials.json), never refreshed or logged. Group: claude-code.",
       "advanced": true
     },
     "footer": {
@@ -363,11 +378,38 @@
           },
           "timeZone": {
             "type": "string"
+          },
+          "staleMark": {
+            "type": "string"
           }
         }
       },
       "statusFile": {
         "type": "string"
+      },
+      "staleMark": {
+        "type": "string"
+      },
+      "markStaleAfterMs": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "claudeCode": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "credentialsFile": {
+            "type": "string"
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 60000
+          }
+        }
       }
     }
   }
