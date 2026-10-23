@@ -1,0 +1,45 @@
+{
+  "channels": {
+    "discord": {
+      "actions": {
+        "presence": true
+      }
+    }
+  },
+  "plugins": {
+    "allow": [
+      "quota-presence"
+    ],
+    "load": {
+      "paths": [
+        "/path/to/openclaw-quota-presence"
+      ]
+    },
+    "entries": {
+      "quota-presence": {
+        "enabled": true,
+        "hooks": {
+          "allowConversationAccess": true
+        },
+        "config": {
+          "items": [
+            {
+              "label": "Argon",
+              "source": "agy:gemini-4-argon"
+            },
+            {
+              "label": "GPT",
+              "source": "usage:openai"
+            },
+            {
+              "label": "Opus",
+              "source": "agy:claude-and-gpt-models"
+            }
+          ],
+          "intervalMs": 900000,
+          "minUpdateIntervalMs": 120000
+        }
+      }
+    }
+  }
+}

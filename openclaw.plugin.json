@@ -1,0 +1,374 @@
+{
+  "id": "quota-presence",
+  "name": "Quota Presence",
+  "description": "Writes how much quota is left on each AI provider as one status line (status.json) for the bot's Discord custom status. Reads agy /usage and OpenClaw's provider usage; no model calls.",
+  "version": "0.4.0",
+  "categories": [
+    "data-analytics",
+    "infrastructure"
+  ],
+  "activation": {
+    "onStartup": true
+  },
+  "uiHints": {
+    "items": {
+      "label": "What to show",
+      "help": "\"auto\" (every source found) or a list of { label, source, window, windows }. source is a group such as agy:gemini-4-argon or usage:openai; window is min (the tightest limit, default), 5h or week; windows: [\"5h\",\"week\"] shows several through {windows}."
+    },
+    "template": {
+      "label": "Status template",
+      "help": "{items} is replaced by the items joined with the separator; {time} by HH:MM. Cut to 128 UTF-16 code units (Discord's limit)."
+    },
+    "itemTemplate": {
+      "label": "Item template",
+      "help": "Default \"{label} {remaining}%\". Also {used}, {window}, {reset} (time until reset: 45m / 3h / 2d), {resetAt} (when: 10/28 16:04), {windows} (every window of the item).",
+      "advanced": true
+    },
+    "missingTemplate": {
+      "label": "Item without data",
+      "help": "Default \"{label} ?\". false hides the item.",
+      "advanced": true
+    },
+    "separator": {
+      "label": "Separator",
+      "advanced": true
+    },
+    "windowTemplate": {
+      "label": "Window template",
+      "help": "One window inside {windows}. Default \"{window} {remaining}%\"; same placeholders as the item template.",
+      "advanced": true
+    },
+    "windowSeparator": {
+      "label": "Window separator",
+      "help": "Between the windows of {windows}. Default \"・\".",
+      "advanced": true
+    },
+    "windowLabels": {
+      "label": "Window names",
+      "help": "Names for {window}, e.g. { \"5h\": \"5h\", \"week\": \"1w\" }. Unlisted windows show their id.",
+      "advanced": true
+    },
+    "resetAtFormat": {
+      "label": "Reset time format",
+      "help": "{resetAt}: YYYY, M, MM, D, DD, H, HH, mm; the rest is literal. Default \"M/D HH:mm\", in timeZone (default Asia/Tokyo).",
+      "advanced": true
+    },
+    "resetAtTodayFormat": {
+      "label": "Reset time format (today)",
+      "help": "Used instead of resetAtFormat when the reset is today, e.g. \"HH:mm\". Unset: always resetAtFormat.",
+      "advanced": true
+    },
+    "resetPrecision": {
+      "label": "Reset countdown units",
+      "help": "{reset} with 1 unit (3h, default) or 2 (1d6h, 3h20m).",
+      "advanced": true
+    },
+    "intervalMs": {
+      "label": "Refresh every (ms)",
+      "help": "Default 900000 (15 minutes). At least 60000."
+    },
+    "minUpdateIntervalMs": {
+      "label": "Minimum gap after a turn (ms)",
+      "help": "agent_end refreshes at most this often; a turn inside the gap schedules one refresh at its end. Default 120000."
+    },
+    "refreshOnAgentEnd": {
+      "label": "Refresh after each turn",
+      "help": "Needs plugins.entries.quota-presence.hooks.allowConversationAccess=true. On by default."
+    },
+    "startDelayMs": {
+      "label": "First refresh after (ms)",
+      "help": "Wait this long after the service starts before the first refresh. Default 10000.",
+      "advanced": true
+    },
+    "staleAfterMs": {
+      "label": "Keep old numbers for (ms)",
+      "help": "When a source fails, its last numbers stay up this long. Default 10800000 (3 hours); 0 keeps them forever.",
+      "advanced": true
+    },
+    "agy": {
+      "label": "Antigravity CLI",
+      "help": "{ enabled, command, args, timeoutMs (30000), lockFile }. Runs `agy -p /usage` (no model call). On by default.",
+      "advanced": true
+    },
+    "usage": {
+      "label": "OpenClaw provider usage",
+      "help": "{ enabled, providers, timeoutMs, agentDir, module }. Reads the same numbers as /status, inside the Gateway. On by default.",
+      "advanced": true
+    },
+    "footer": {
+      "label": "Reply footer",
+      "help": "{ enabled, template, channels, maxLength (300) }, plus its own items, itemTemplate, separator, missingTemplate, windowTemplate, windowSeparator, windowLabels, resetAtFormat, resetAtTodayFormat, resetPrecision, timeZone; any left out come from the main config. Adds one \"-# …\" line under each outgoing message, from the cached numbers. Off by default; while on, Discord's streamed reply preview is off. Changing enabled takes `openclaw plugins reload quota-presence`."
+    },
+    "statusFile": {
+      "label": "Status file",
+      "help": "Where the line is written ({ text, items, updatedAt }). Default <state dir>/quota-presence/status.json. automation/set-presence.js reads it and sets the Discord custom status.",
+      "advanced": true
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "items": {
+        "anyOf": [
+          {
+            "const": "auto"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "source"
+              ],
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                },
+                "window": {
+                  "type": "string"
+                },
+                "windows": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "template": {
+        "type": "string"
+      },
+      "itemTemplate": {
+        "type": "string"
+      },
+      "missingTemplate": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "const": false
+          }
+        ]
+      },
+      "separator": {
+        "type": "string"
+      },
+      "windowTemplate": {
+        "type": "string"
+      },
+      "windowSeparator": {
+        "type": "string"
+      },
+      "windowLabels": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        }
+      },
+      "resetAtFormat": {
+        "type": "string"
+      },
+      "resetAtTodayFormat": {
+        "type": "string"
+      },
+      "resetPrecision": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 3
+      },
+      "maxLength": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 128
+      },
+      "timeZone": {
+        "type": "string"
+      },
+      "intervalMs": {
+        "type": "integer",
+        "minimum": 60000
+      },
+      "minUpdateIntervalMs": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "refreshOnAgentEnd": {
+        "type": "boolean"
+      },
+      "startDelayMs": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 600000
+      },
+      "staleAfterMs": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "agy": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "command": {
+            "type": "string"
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 120000
+          },
+          "lockFile": {
+            "type": "string"
+          }
+        }
+      },
+      "usage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "providers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 60000
+          },
+          "agentDir": {
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          }
+        }
+      },
+      "footer": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "template": {
+            "type": "string"
+          },
+          "channels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "maxLength": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000
+          },
+          "items": {
+            "anyOf": [
+              {
+                "const": "auto"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "source"
+                  ],
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "window": {
+                      "type": "string"
+                    },
+                    "windows": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "itemTemplate": {
+            "type": "string"
+          },
+          "missingTemplate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "const": false
+              }
+            ]
+          },
+          "separator": {
+            "type": "string"
+          },
+          "windowTemplate": {
+            "type": "string"
+          },
+          "windowSeparator": {
+            "type": "string"
+          },
+          "windowLabels": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "resetAtFormat": {
+            "type": "string"
+          },
+          "resetAtTodayFormat": {
+            "type": "string"
+          },
+          "resetPrecision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3
+          },
+          "timeZone": {
+            "type": "string"
+          }
+        }
+      },
+      "statusFile": {
+        "type": "string"
+      }
+    }
+  }
+}
