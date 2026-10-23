@@ -2,7 +2,9 @@
 // Runs every intervalMs; request() (after a turn) refreshes too, but never
 // more often than minUpdateIntervalMs — a call inside that window schedules
 // one refresh at its end. Rows are kept per group, so a source that fails or
-// leaves a provider out keeps showing its last value until staleAfterMs.
+// leaves a provider out keeps showing its last value until staleAfterMs —
+// except when its error says the login is gone (error.clear: those groups go
+// unknown at once), and never past a row's own reset time.
 
 import { describeItems, renderStatus } from "./format.js";
 
@@ -35,6 +37,7 @@ export function createQuotaPresence({ config, sources, publish, log = console, n
           lastError.delete(s.id);
           for (const e of rows.errors ?? []) log.debug?.(`${s.id}: ${e}`);
         } catch (e) {
+          for (const g of e?.clear ?? []) groups.delete(g);
           const msg = e?.message ?? String(e);
           if (lastError.get(s.id) !== msg) log.warn?.(`${s.id}: ${msg}`);
           lastError.set(s.id, msg);
@@ -43,13 +46,20 @@ export function createQuotaPresence({ config, sources, publish, log = console, n
     );
   }
 
-  /** Current rows, dropping groups not refreshed within staleAfterMs. */
+  /**
+   * Current rows with their fetch time (fetchedAt), dropping groups not
+   * refreshed within staleAfterMs and rows whose window has reset since they
+   * were fetched (the old number says nothing about the new window).
+   */
   function rows() {
     const t = now();
     const out = [];
     for (const [g, v] of groups) {
-      if (config.staleAfterMs > 0 && t - v.at > config.staleAfterMs) groups.delete(g);
-      else out.push(...v.rows);
+      if (config.staleAfterMs > 0 && t - v.at > config.staleAfterMs) {
+        groups.delete(g);
+        continue;
+      }
+      for (const r of v.rows) if (!(r.resetAt > v.at && r.resetAt <= t)) out.push({ ...r, fetchedAt: v.at });
     }
     return out;
   }

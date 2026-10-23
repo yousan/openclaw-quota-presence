@@ -9,9 +9,11 @@ if you want, as a small line under each reply:
 <img src="docs/reply-footer.png" alt="A bot reply in Discord ending with a small grey line “Argon 0% | GPT 98% | Opus 100%”; the message text is blurred" width="778">
 
 *The custom status in the member list, and the optional [reply footer](#reply-footer)
-(message text blurred).*
+(message text blurred). Taken with 0.4.0, where "Opus" was agy's own Claude pool —
+to show the quota of the Claude account your agent actually uses, see
+[Claude Code's login](#claude-codes-login-claude-code).*
 
-No model calls anywhere. Two parts:
+No model calls anywhere, and nothing from any conversation is sent. Two parts:
 
 1. **The plugin** (a Gateway service) collects the numbers and writes one line
    to `<state dir>/quota-presence/status.json` (`{ text, items, updatedAt }`,
@@ -30,6 +32,7 @@ The numbers come from:
 |---|---|---|
 | Antigravity CLI | runs `agy -p /usage` (30 s timeout, one run at a time, lock file) | `agy:<slug of the first column>` — e.g. `agy:gemini-4-argon`, `agy:gemini-models`, `agy:claude-and-gpt-models` |
 | OpenClaw provider usage | calls the Gateway's own `loadProviderUsageSummary` (the numbers behind `/status`) **inside the Gateway process** — never the `openclaw` CLI | `usage:<provider id>` — e.g. `usage:openai`, `usage:anthropic` |
+| Claude Code's login (opt-in, `claudeCode.enabled`) | `GET https://api.anthropic.com/api/oauth/usage` with Claude Code's own OAuth token, read-only — the request Claude Code's `/usage` makes | `claude-code` |
 
 Each group has windows: `5h`, `week`, `day`, or a slug of the provider's own
 label (`opus`, `sonnet`, …). What each source gives (checked 2026-10-23,
@@ -42,33 +45,66 @@ OpenClaw 2026.10.2):
 | `agy:gemini-4-argon` | `week` | |
 | `usage:openai` | `5h`, `week` | needs an OpenAI OAuth/token profile (ChatGPT subscription) |
 | `usage:anthropic` | `5h`, `week`, then `sonnet` or `opus`, per-model limits (`slug` of the model name), `extra-usage` | needs an Anthropic OAuth/token profile in OpenClaw's auth store — see below |
+| `claude-code` | `5h`, `week`, then model-scoped weekly limits if the plan has any (`fable`, `opus`, …) | the Claude subscription Claude Code is logged in with — see below |
 
 All of them have a reset time (`{reset}`, `{resetAt}`) except the model
 windows of `usage:anthropic` without one (`sonnet`/`opus`) and `extra-usage`.
 
-### Claude through `claude-cli` has no usage group
+### Claude Code's login (`claude-code`)
 
-If the agent runs Claude through the `claude-cli` runtime (Claude Code's own
-login), there is **no `usage:anthropic`** — the numbers `/status` would show
-for your Anthropic subscription are not available to this plugin:
+If the agent runs Claude through the `claude-cli` runtime, its quota is the
+quota of the Claude subscription **Claude Code is logged in with**. Neither
+`usage:anthropic` nor `agy:claude-and-gpt-models` is that:
 
 - OpenClaw's Anthropic usage auth (`resolveAnthropicUsageAuth`, OpenClaw
-  2026.10.2) looks for an admin key, then an OAuth/token profile, and
-  **explicitly skips the `anthropic:claude-cli` profile**. Claude Code's login
-  lives in `~/.claude/.credentials.json`, not in OpenClaw's auth store.
-- `claude-cli` maps to `anthropic` (`resolveUsageProviderId`), so asking for
-  either gives the same empty answer: `loadProviderUsageSummary({ providers:
-  ["anthropic", "claude-cli"] })` returns nothing for them (checked on a Gateway
-  whose Opus runs through `claude-cli`; `openai` came back fine).
-- What would give it: an Anthropic OAuth profile in OpenClaw's auth store
-  (`openclaw models auth login --provider anthropic`; a setup token without the
-  `user:profile` scope gets a 403 and then needs `CLAUDE_AI_SESSION_KEY`), or
-  an admin key (`ANTHROPIC_ADMIN_KEY`, which gives 30-day cost history, not
-  5h/week windows). Not tried: a new profile is also there for the agent's
-  `anthropic` models, so check the auth order before adding one.
+  2026.10.2) looks for an admin key or an OAuth/token profile in OpenClaw's own
+  auth store and **skips the `anthropic:claude-cli` profile**, so
+  `usage:anthropic` is missing (or belongs to another profile).
+- `agy:claude-and-gpt-models` is Antigravity's own pool for Claude/GPT models
+  inside agy. Labelled "Opus", it shows agy's quota, not your Claude plan.
 
-`agy:claude-and-gpt-models` is a different pool (Antigravity's), so labelling
-it "Opus" shows agy's Claude quota, not the one `claude-cli` uses.
+`claudeCode.enabled: true` adds the group `claude-code`, read the way Claude
+Code's own `/usage` reads it (checked with Claude Code 2.1.309):
+`GET https://api.anthropic.com/api/oauth/usage` with the login's OAuth access
+token. One request per refresh (every 15 minutes, and after a turn at most
+every 2 minutes); no model call, no request body, nothing from any
+conversation.
+
+| window | from | what it is |
+|---|---|---|
+| `5h` | `five_hour` | the plan's session limit (every model, Claude Code and claude.ai together) |
+| `week` | `seven_day` | the plan's weekly limit, all models |
+| `fable`, `opus`, … | `limits[]` with a model scope, `seven_day_opus`/`seven_day_sonnet` | a weekly limit on one model — only if the plan has one |
+
+Each window has the reset time the API gave (`{reset}`, `{resetAt}`); one it
+did not give has none — nothing is computed from the fetch time. `min` (the
+default `window`) leaves out the model-scoped windows: a limit on Fable is not
+the limit on Opus. On a Max plan (October 2026) there is **no Opus-only
+limit** — Opus counts against `5h` and `week` — so label the item for what it
+is (`Claude`), not `Opus`.
+
+The token:
+
+- is read from Claude Code's credentials file, `$CLAUDE_CONFIG_DIR/.credentials.json`
+  or `~/.claude/.credentials.json` of the Gateway's user (`claudeCode.credentialsFile`
+  to point elsewhere). macOS keeps the login in the Keychain; there is no file
+  to read, so the group stays unknown;
+- is **never refreshed**: refreshing would rotate the refresh token Claude Code
+  holds. Claude Code refreshes it whenever it runs (an agent on `claude-cli`
+  runs it all the time). A token within a minute of its expiry counts as expired;
+- is never logged or written anywhere, is only sent to that one URL, and does
+  not follow redirects.
+
+When there is no usable login — no file, no OAuth token (an API-key login),
+an expired token, or an HTTP 401/403 — the group goes **unknown at once**
+(`{label} ?`, `remaining: null` in `status.json`). A timeout, 429 or 5xx keeps
+the last numbers, which `{stale}` marks after `markStaleAfterMs`; a number
+whose window has reset since it was fetched is dropped, never shown for the
+new window.
+
+`claude -p /usage` gives the same numbers without a model call too, but takes
+about 90 s of CPU (it also analyses the local transcripts) and prints prose
+without a year, so the plugin does not run it.
 
 ## Install
 
@@ -86,8 +122,11 @@ it "Opus" shows agy's Claude quota, not the one `claude-cli` uses.
           "items": [
             { "label": "Argon", "source": "agy:gemini-4-argon" },
             { "label": "GPT", "source": "usage:openai" },
-            { "label": "Opus", "source": "usage:anthropic", "window": "opus" }
-          ]
+            { "label": "Claude", "source": "claude-code", "windows": ["5h", "week"] }
+          ],
+          "itemTemplate": "{label} {remaining}%{stale}",
+          // the Claude subscription Claude Code is logged in with; see above
+          "claudeCode": { "enabled": true }
         }
       }
     }
@@ -143,7 +182,7 @@ constants (`STATUS`, `REAPPLY_MS`, …) are at the top of the file.
 |---|---|---|
 | `items` | `"auto"` | `[{ label, source, window, windows }]`. `window`: `min` (the tightest limit of the group; default), or a window id. `windows: ["5h", "week"]`: several windows, shown through `{windows}` |
 | `template` | `"{items}"` | `{items}`, `{time}` (HH:MM in `timeZone`; unset = the host's zone) |
-| `itemTemplate` | `"{label} {remaining}%"` | also `{used}`, `{window}`, `{reset}` (45m / 3h / 2d), `{resetAt}` (10/28 16:04), `{windows}`. With `windows`, `{remaining}`/`{window}`/… are the tightest of them |
+| `itemTemplate` | `"{label} {remaining}%"` | also `{used}`, `{window}`, `{reset}` (45m / 3h / 2d), `{resetAt}` (10/28 16:04), `{windows}`, `{stale}` (`staleMark` when the numbers are old). With `windows`, `{remaining}`/`{window}`/… are the tightest of them |
 | `missingTemplate` | `"{label} ?"` | an item with no data (none of its windows found); `false` hides it |
 | `separator` | `" \| "` | |
 | `windowTemplate` | `"{window} {remaining}%"` | one window inside `{windows}`; same placeholders as `itemTemplate`. A window the source lacks is left out |
@@ -157,10 +196,13 @@ constants (`STATUS`, `REAPPLY_MS`, …) are at the top of the file.
 | `intervalMs` | `900000` | refresh every 15 minutes (minimum 60000) |
 | `refreshOnAgentEnd` | `true` | also refresh after each agent turn… |
 | `minUpdateIntervalMs` | `120000` | …but at most this often; a turn inside the gap schedules one refresh at its end |
-| `staleAfterMs` | `10800000` | a source that fails keeps its last numbers this long (0 = forever) |
+| `staleAfterMs` | `10800000` | a source that fails keeps its last numbers this long (0 = forever); never past the window's reset time |
+| `markStaleAfterMs` | `2 × intervalMs + 5 min` (35 min) | `{stale}` shows `staleMark` for numbers fetched longer ago than this (0 = never) |
+| `staleMark` | `"*"` | what `{stale}` shows |
 | `statusFile` | `<state>/quota-presence/status.json` | where the line is written |
 | `agy` | `{ enabled: true, command: "agy", args: ["-p", "/usage"], timeoutMs: 30000, lockFile: "<state>/quota-presence/agy.lock" }` | |
 | `usage` | `{ enabled: true, timeoutMs: 10000 }` | also `providers` (only these), `agentDir`, `module` (path to the dist chunk, if it cannot be found) |
+| `claudeCode` | `{ enabled: false, timeoutMs: 10000 }` | the plan usage of Claude Code's login, group `claude-code`; also `credentialsFile`. See [above](#claude-codes-login-claude-code) |
 | `footer` | `{ enabled: false, template: "-# {items}", channels: ["discord"], maxLength: 300 }` | add the status as a small line under each reply; **turns off Discord's streamed preview**. Can have its own display keys. See below |
 
 ### Examples
@@ -210,6 +252,25 @@ Detailed reply footer, both windows and when they reset (the status keeps the sh
 -# Argon 1w 0% ↻10/28 16:04 | GPT 5h 100% ↻14:00・1w 100% ↻10/30 03:01 | AG-Claude 5h 100% ↻14:03・1w 100% ↻10/30 09:03
 ```
 
+The Claude account your agent uses, with old numbers marked (`claudeCode.enabled: true`;
+numbers of 2026-10-23 23:07 JST):
+
+```jsonc
+"items": [
+  { "label": "Claude", "source": "claude-code", "windows": ["5h", "week"] }
+],
+"itemTemplate": "{label} {windows}",
+"windowTemplate": "{window} {remaining}%{stale} ↻{resetAt}",
+"windowLabels": { "week": "1w" },
+"resetAtTodayFormat": "HH:mm"
+```
+```
+Claude 5h 65% ↻10/24 01:40・1w 92% ↻10/30 17:00
+```
+
+The same after two failed refreshes in a row: `Claude 5h 65%* ↻10/24 01:40・1w 92%* ↻10/30 17:00`;
+with no usable login: `Claude ?`.
+
 ### Reply footer
 
 Off by default. With `footer.enabled: true` each outgoing Discord message ends
@@ -217,7 +278,7 @@ with one small line:
 
 ```
 Here is the answer…
--# Argon 55% | GPT 84% | Opus 92%
+-# Argon 55% | GPT 84% | Claude 92%
 ```
 
 ```jsonc
@@ -240,7 +301,7 @@ Here is the answer…
   never stacks them. Other `-#` lines the model writes stay.
 - Left alone: empty and attachment-only messages, `NO_REPLY` / `HEARTBEAT_OK`,
   reasoning quotes (`> 🧠 …`), text whose code block is still open, and anything
-  before the first refresh (no `Argon ? | GPT ? | Opus ?` line). A text message
+  before the first refresh (no `Argon ? | GPT ? | Claude ?` line). A text message
   with an attachment gets the line under its text.
 - Every outgoing Discord message gets it, not only replies: the agent's own
   `message` tool sends, automation/cron deliveries and error notices too. If one
@@ -248,7 +309,7 @@ Here is the answer…
 - `channels: []` adds it on every channel; `template` must keep `{items}`.
 - Its own `items`, `itemTemplate`, `separator`, `missingTemplate`,
   `windowTemplate`, `windowSeparator`, `windowLabels`, `resetAtFormat`,
-  `resetAtTodayFormat`, `resetPrecision`, `timeZone`: any it leaves out come
+  `resetAtTodayFormat`, `resetPrecision`, `staleMark`, `timeZone`: any it leaves out come
   from the main config, so a footer with only `enabled` shows the same line as
   the custom status (as in 0.3.0). Changing them needs no reload. The line is
   cut to `footer.maxLength` (300); the custom status stays at 128.
@@ -302,7 +363,8 @@ So the footer stays opt-in and the trade-off is yours.
   update renames it, set `usage.module` (and please open an issue).
 - A provider OpenClaw cannot read usage for (no subscription/OAuth credential
   in the agent's auth store) has no `usage:` group — `/status` shows nothing
-  for it either. Point the item at an agy group instead.
+  for it either. For Claude through `claude-cli`, use `claude-code`; an agy
+  group is agy's own pool, not that provider's.
 
 ## Development
 

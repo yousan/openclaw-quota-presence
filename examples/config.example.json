@@ -32,12 +32,20 @@
               "source": "usage:openai"
             },
             {
-              "label": "Opus",
-              "source": "agy:claude-and-gpt-models"
+              "label": "Claude",
+              "source": "claude-code",
+              "windows": [
+                "5h",
+                "week"
+              ]
             }
           ],
           "intervalMs": 900000,
-          "minUpdateIntervalMs": 120000
+          "minUpdateIntervalMs": 120000,
+          "itemTemplate": "{label} {remaining}%{stale}",
+          "claudeCode": {
+            "enabled": true
+          }
         }
       }
     }

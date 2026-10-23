@@ -2,7 +2,7 @@
 // Applied to one outgoing message (message_sending runs once per payload,
 // before the channel splits long text), so the line lands once, at the end.
 
-import { fill } from "./format.js";
+import { DEFAULT_STALE_MARK, fill } from "./format.js";
 
 const SILENT = /^\s*(NO_REPLY|HEARTBEAT_OK)\s*$/;
 const REASONING = /^\s*>\s*🧠/; // Discord's reasoning quote ("> 🧠 …")
@@ -13,7 +13,7 @@ const FENCE = /^\s*(```|~~~)/;
  * used to find footers already in the text (an older one, or one the model
  * copied from the chat history) so there is only ever one.
  * @param {object} opts  template, itemTemplate, missingTemplate, separator, items,
- *   windowTemplate, windowSeparator, windowLabels, resetAtFormat, resetAtTodayFormat
+ *   windowTemplate, windowSeparator, windowLabels, resetAtFormat, resetAtTodayFormat, staleMark
  */
 export function footerPattern(opts = {}) {
   const {
@@ -25,6 +25,7 @@ export function footerPattern(opts = {}) {
     windowSeparator = "・",
     resetAtFormat = "M/D HH:mm",
     resetAtTodayFormat,
+    staleMark = DEFAULT_STALE_MARK,
   } = opts;
   const labels = Array.isArray(opts.items) ? opts.items.map((i) => i.label ?? i.source).filter(Boolean) : [];
   const label = labels.length ? `(?:${labels.map(escape).join("|")})` : ".+?";
@@ -37,6 +38,7 @@ export function footerPattern(opts = {}) {
     window: `(?:${[...names, "\\S*"].join("|")})`,
     reset: "\\S*",
     resetAt: `(?:${resetAt.join("|")})?`,
+    stale: `(?:${escape(staleMark)})?`,
   };
   const win = toRegex(windowTemplate, vars, false);
   vars.windows = `(?:${win}(?:${escape(windowSeparator)}${win})*)`;
