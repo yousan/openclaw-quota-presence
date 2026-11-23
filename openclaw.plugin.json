@@ -2,7 +2,7 @@
   "id": "quota-presence",
   "name": "Quota Presence",
   "description": "Writes how much quota is left on each AI provider as one status line (status.json) for the bot's Discord custom status. Reads agy /usage, OpenClaw's provider usage and, if enabled, Claude Code's own plan usage; no model calls.",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "categories": [
     "data-analytics",
     "infrastructure"
@@ -296,6 +296,13 @@
             "items": {
               "type": "string"
             }
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Only messages sent through these channel account ids get the line (e.g. [\"default\"] when one Gateway runs several Discord bots). Unset or [] = every account."
           },
           "maxLength": {
             "type": "integer",

@@ -307,6 +307,9 @@ Here is the answer…
   `message` tool sends, automation/cron deliveries and error notices too. If one
   turn sends several messages, each ends with the line.
 - `channels: []` adds it on every channel; `template` must keep `{items}`.
+- `accounts: ["default"]` keeps it to those channel accounts — for one Gateway
+  running several Discord bots (multi-agent), where only one bot should show
+  the quota. Unset adds it for every account.
 - Its own `items`, `itemTemplate`, `separator`, `missingTemplate`,
   `windowTemplate`, `windowSeparator`, `windowLabels`, `resetAtFormat`,
   `resetAtTodayFormat`, `resetPrecision`, `staleMark`, `timeZone`: any it leaves out come
