@@ -77,6 +77,9 @@ export function footerHook(running, footer = {}, event, ctx) {
   const channels = footer.channels ?? ["discord"];
   if (!running) return;
   if (channels.length && !channels.includes(ctx?.channelId)) return;
+  // Several bots in one Gateway: only these channel accounts get the line (unset = every account).
+  const accounts = footer.accounts ?? [];
+  if (accounts.length && !accounts.includes(ctx?.accountId ?? "default")) return;
   const opts = { ...footerDisplay(footer), template: footer.template ?? "-# {items}", maxLength: footer.maxLength ?? 300 };
   // Nothing fetched yet (or all of it stale): no line of question marks.
   if (!running.renderWith({ ...opts, missingTemplate: false })) return;

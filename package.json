@@ -1,6 +1,6 @@
 {
   "name": "@yousan/openclaw-quota-presence",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Shows how much quota is left on each AI provider as the bot's Discord custom status, through an OpenClaw automation script. Reads agy /usage, OpenClaw's provider usage and Claude Code's own plan usage; no model calls.",
   "type": "module",
   "license": "MIT",

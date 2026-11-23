@@ -199,3 +199,11 @@ test("the manifest's configSchema has every footer display key and items[].windo
   assert.ok("windows" in props.items.anyOf[1].items.properties);
   assert.ok("windows" in props.footer.properties.items.anyOf[1].items.properties);
 });
+
+test("footer: accounts keeps the line to those channel accounts (several bots in one Gateway)", async () => {
+  const running = await service({ items: EXAMPLE_ITEMS, itemTemplate: "{label}={remaining}", separator: ", " });
+  const footer = { accounts: ["default"] };
+  assert.deepEqual(footerHook(running, footer, { content: "hi" }, { ...discord, accountId: "default" }), { content: "hi\n-# Argon=55, GPT=84, Opus=88" });
+  assert.equal(footerHook(running, footer, { content: "hi" }, { ...discord, accountId: "kopuu" }), undefined, "another bot's reply is left alone");
+  assert.deepEqual(footerHook(running, footer, { content: "hi" }, discord), { content: "hi\n-# Argon=55, GPT=84, Opus=88" }, "no accountId = the default account");
+});
